@@ -111,12 +111,10 @@ def check_tokens():
             'Отсутствует PRACTICUM_TOKEN')
     if not TELEGRAM_TOKEN:
         tokens_bool = False
-        logger.critical(
-             'Отсутствует TELEGRAM_TOKEN')
+        logger.critical('Отсутствует TELEGRAM_TOKEN')
     if not TELEGRAM_CHAT_ID:
         tokens_bool = False
-        logger.critical(
-             'Отсутствует TELEGRAM_CHAT_ID')
+        logger.critical('Отсутствует TELEGRAM_CHAT_ID')
     return tokens_bool
 
 
