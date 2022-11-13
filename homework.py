@@ -1,6 +1,8 @@
 import logging
 import os
+import sys
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -8,8 +10,6 @@ from dotenv import load_dotenv
 
 from exceptions import (
     SendingMessageError,
-    TokensMissing,
-    NotCorrectAPIAnswer,
     HomeworkStatusException,
     ServerError
 )
@@ -32,21 +32,15 @@ HOMEWORK_STATUSES = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-logging.basicConfig(
-    level=logging.INFO,
-    filename='program.log',
-    filemode='w',
-    format='%(asctime)s, %(levelname)s, %(message)s, %(name)s'
-)
 logger = logging.getLogger(__name__)
-logger.addHandler(
-    logging.StreamHandler()
-)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
 
 
 def send_message(bot, message):
     """Отправляем сообщение в чат."""
     try:
+        logger.info('Отправление сообщения')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.info('Сообщение успешно отправлено в чат')
     except Exception:
@@ -56,30 +50,34 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Запрос к API Яндекс практикума."""
+    logger.info('Получаем ответ от API Практикума.')
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    homework_statuses = requests.get(
-        ENDPOINT,
-        headers=HEADERS,
-        params=params
-    )
-    if homework_statuses.status_code != 200:
-        logger.error('Сервер недоступен')
+    try:
+        homework_statuses = requests.get(
+            ENDPOINT,
+            headers=HEADERS,
+            params=params
+        )
+    except requests.exceptions.ConnectionError as error:
+        logger.error('Урл может быть недоступен')
+        raise error
+    if homework_statuses.status_code != HTTPStatus.OK:
         raise ServerError('Функция get_api_answer вернула не 200')
-    hw = homework_statuses.json()
-    if isinstance(hw, list):
-        hw_dict = hw[0]
+    homework = homework_statuses.json()
+    if isinstance(homework, list):
+        hw_dict = homework[0]
         return hw_dict
-    return hw
+    return homework
 
 
 def check_response(response):
     """Проверка ответа API Яндекс практикума."""
     if not isinstance(response, dict):
-        raise NotCorrectAPIAnswer('Функция get_api_answer вернула не словарь')
+        raise TypeError('Функция get_api_answer вернула не словарь')
     homework_lst = response.get('homeworks')
     if not isinstance(homework_lst, list):
-        raise NotCorrectAPIAnswer('Под ключом `homeworks` не список')
+        raise TypeError('Под ключом `homeworks` не список')
     if not len(homework_lst):
         logger.debug('Под ключом `homeworks` список пуст')
     return homework_lst
@@ -104,34 +102,25 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяем доступность переменных окружения."""
-    tokens_bool = True
-    if not PRACTICUM_TOKEN:
-        tokens_bool = False
-        logger.critical(
-            'Отсутствует PRACTICUM_TOKEN')
-    if not TELEGRAM_TOKEN:
-        tokens_bool = False
-        logger.critical('Отсутствует TELEGRAM_TOKEN')
-    if not TELEGRAM_CHAT_ID:
-        tokens_bool = False
-        logger.critical('Отсутствует TELEGRAM_CHAT_ID')
-    return tokens_bool
+    return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
-        logging.critical('Отсутствует один из токенов')
-        raise TokensMissing
+    logger.debug("Бот запущен")
+    if check_tokens() is False:
+        logger.critical("Не хватает токенов")
+        sys.exit("Не хватает токенов")
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-            for hw in homeworks:
-                message = parse_status(hw)
+            if homeworks:
+                message = parse_status(homeworks)
                 send_message(bot, message)
+            logging.debug('отсутствие в ответе новых статусов')
             current_timestamp = int(response['current_date'])
         except Exception as error:
             error_message = f' Сбой в работе программы: {error}'
@@ -143,4 +132,10 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='program.log',
+        filemode='w',
+        format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)d'
+    )
     main()
