@@ -8,3 +8,7 @@ class ServerError(Exception):
 
 class HomeworkStatusException(Exception):
     pass
+
+
+class ConnectionServerError(Exception):
+    pass

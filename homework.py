@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from exceptions import (
     SendingMessageError,
     HomeworkStatusException,
-    ServerError
+    ServerError,
+    ConnectionServerError
 )
 
 load_dotenv()
@@ -59,9 +60,8 @@ def get_api_answer(current_timestamp):
             headers=HEADERS,
             params=params
         )
-    except requests.exceptions.ConnectionError as error:
-        logger.error('Урл может быть недоступен')
-        raise error
+    except requests.exceptions.ConnectionError:
+        raise ConnectionServerError('Урл может быть недоступен')
     if homework_statuses.status_code != HTTPStatus.OK:
         raise ServerError('Функция get_api_answer вернула не 200')
     homework = homework_statuses.json()
@@ -91,10 +91,8 @@ def parse_status(homework):
         homework_name = homework['homework_name']
         homework_status = homework['status']
     except KeyError as e:
-        logger.error(e)
         raise e
     if homework_status not in HOMEWORK_STATUSES:
-        logger.error("Получен неизвестный статус домашней работы")
         raise HomeworkStatusException
     verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -108,7 +106,7 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     logger.debug("Бот запущен")
-    if check_tokens() is False:
+    if not check_tokens():
         logger.critical("Не хватает токенов")
         sys.exit("Не хватает токенов")
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -134,7 +132,7 @@ def main():
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
-        filename='program.log',
+        filename=__file__+'.log',
         filemode='w',
         format='%(asctime)s, %(levelname)s, %(message)s, %(name)s, %(lineno)d'
     )
