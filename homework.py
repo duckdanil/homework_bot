@@ -73,14 +73,23 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """Проверка ответа API Яндекс практикума."""
-    if not isinstance(response, dict):
-        raise TypeError('Функция get_api_answer вернула не словарь')
-    homework_lst = response.get('homeworks')
-    if not isinstance(homework_lst, list):
-        raise TypeError('Под ключом `homeworks` не список')
-    if not len(homework_lst):
-        logger.debug('Под ключом `homeworks` список пуст')
-    return homework_lst
+    try:
+        homeworks = response["homeworks"]
+        response["current_date"]
+    except KeyError as e:
+        logger.error(e)
+        raise e
+    except TypeError as e:
+        logger.error("Ответ от API пришел не в виде словаря.")
+        raise e
+
+    homeworks = response["homeworks"]
+
+    if not isinstance(homeworks, list):
+        raise TypeError
+    if not homeworks:
+        logger.debug("Новые статусы отсутствуют")
+    return homeworks
 
 
 def parse_status(homework):
